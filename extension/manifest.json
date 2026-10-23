@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Kimi Bridge for Safari",
+  "version": "0.1.0",
+  "description": "Safari port of the Kimi Browser Extension bridge: connects to the local kimi-webbridge daemon so local AI agents can drive Safari.",
+  "icons": {
+    "16": "icon/16.png",
+    "32": "icon/32.png",
+    "48": "icon/48.png",
+    "128": "icon/128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content-scripts/bridge.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "storage",
+    "alarms",
+    "scripting"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' ws://*:* wss://*:* http://*:* https://*:*;"
+  }
+}

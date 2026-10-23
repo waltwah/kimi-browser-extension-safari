@@ -90,11 +90,20 @@
 - [x] 官方文档调研（无开发文档，仅使用文档）
 - [x] Safari 扩展开发资料调研 → RESEARCH.md
 - [x] WS 协议逆向（静态 + 抓包双验证）→ PROTOCOL.md
-- [ ] `extension/`：MV3 骨架（manifest、background WS 客户端、hello/心跳/reconcile）
-- [ ] 第一批工具（无 CDP 依赖）：navigate / find_tab / list_tabs / list_browser_tabs / attach_tab / close_tab / close_session / evaluate / click / fill / scroll / wait / select_option
-- [ ] screenshot（captureVisibleTab）
-- [ ] snapshot / find（自研 accessibility tree + @e ref）
+- [x] `extension/`：MV3 骨架（manifest、background WS 客户端、hello/心跳/reconcile、4409 处理、工具派发）
+- [x] 第一批工具（无 CDP 依赖）：navigate / find_tab / list_tabs / list_browser_tabs / attach_tab / close_tab / close_session / evaluate / click / fill / scroll / wait / select_option
+- [x] screenshot（captureVisibleTab；selector 裁剪暂降级为整屏 + note）
+- [x] 降级错误路径：cdp / network / save_as_pdf / mouse_click（返回明确 error）
+- [ ] snapshot / find（自研 accessibility tree + @e ref）— 最大工作量
 - [ ] read_page / upload / hover / key_type / send_keys / dialog / drag
-- [ ] 降级与错误路径：cdp / network / save_as_pdf / mouse_click
-- [ ] Xcode 打包 + Safari 实机联调
+- [ ] Safari 实机联调（需先 `sudo xcodebuild -license accept`；Xcode 工程用 packager 命令重新生成，不入库）
 - [ ] （可选）iframe 侧边栏 UI
+
+### extension/ 结构说明
+
+- `manifest.json` — MV3；权限 tabs/activeTab/storage/alarms/scripting + `<all_urls>`；CSP 照抄官方
+- `background.js` — 单文件：WS 连接管理（client UUID、hello、ping/pong、45s 死链、alarms 30s reconcile、1s/3s 快重试、4409 不快重试）+ 工具注册表 + 后台侧工具（tabs 系列、navigate、evaluate、screenshot）+ DOM 工具转发
+- `content-scripts/bridge.js` — DOM 执行层：click / fill / scroll / wait / select_option / evaluate 兜底；`@eN` ref 暂不支持（等 snapshot）
+- `icon/` — 自绘占位图标（无版权问题，后续可换）
+- evaluate 优先 `scripting.executeScript world:"MAIN"`，失败退回 content script 隔离世界 eval
+- ⚠️ 首次 `xcodebuild` 需先 `sudo xcodebuild -license accept`（需用户手动执行）
