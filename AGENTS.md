@@ -58,9 +58,9 @@
 - ⚠️ `xcode-select` 指向 CommandLineTools，`xcrun safari-web-extension-packager` 不可用；用完整路径 `/Applications/Xcode.app/Contents/Developer/usr/bin/safari-web-extension-packager`，或 `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`。
 - ⚠️ npm 缓存目录权限损坏（`~/.npm` 属 root），所有 npm/npx 命令必须加：
   `npm_config_cache=/Users/waltwah/Documents/develop/kimi_browserExtension/.npm-cache`
-- 打包命令（扩展源码在 `extension/` 时）：
+- 打包命令（⚠️ 必须打 `dist/safari/` 背景页变体，先按上文重建）：
   ```bash
-  /Applications/Xcode.app/Contents/Developer/usr/bin/safari-web-extension-packager ./extension \
+  /Applications/Xcode.app/Contents/Developer/usr/bin/safari-web-extension-packager ./dist/safari \
     --app-name "KimiBridgeSafari" --bundle-identifier com.example.kimibridge \
     --swift --macos-only --copy-resources --no-open --force
   ```
@@ -98,7 +98,7 @@
 - [x] **snapshot / find / read_page + @eN ref 体系**（2026-10-23 Safari 实机验收通过：aria 树/stable-node/截断游标续读/find 匹配/ref 定位 fill 全链路 OK）
 - [x] **upload / hover / key_type / send_keys / dialog / drag**（2026-10-23 Safari 实机验收：Enter 提交表单跳页、dialog MAIN-world 预拦截 confirm、upload base64 注入文件全过）→ **25 工具全覆盖**
 - [x] **relay 产品化 + launchd 常驻**（2026-10-23：`relay/relay.js` 零依赖 Origin 伪装中转，已装 `com.kimibridgesafari.relay` LaunchAgent，登录自启、崩溃自动拉起）
-- [ ] Xcode 正式打包分发（当前用临时扩展足够开发）
+- [x] **Xcode 正式打包**（2026-10-23：packager 打 `dist/safari/` → 修 Bundle ID bug → ad-hoc 签名构建 → /Applications/KimiBridgeSafari.app；已启用并通过端到端验收）
 - [ ] （可选）iframe 侧边栏 UI
 
 ### 联调期关键架构事实（实测，优先级高于通用文档）
@@ -114,7 +114,8 @@
 3. Safari 安装方式：设置 → Developer → Add Temporary Extension → 选 `dist/safari/`；改代码后 Temporary 列表里点 Reload。
 4. 扩展内自动适配：Safari UA 优先连 relay 12086，Chrome 先直连 10086 失败再回退 relay（background.js `FALLBACK_WS_URLS`）。
 5. 自检面板：工具栏 K 图标 → popup 显示 `dbg_*` 状态（bg_evaluated/ua/connect_attempt/ws_open…）；同时 dbgLog 会 fetch 上报到 relay `/probe`（联调稳定后移除该 fetch）。
-6. ⚠️ 多客户端互斥：Chrome unpacked、Safari 临时扩展、官方扩展同时只能一个在线（4409）。测试前关掉其他的。
+6. ⚠️ Xcode 打包版启用后必须在 Safari 设置 → 扩展 → KimiBridgeSafari 把网站访问改为「始终允许」，否则页面操作会卡在权限询问上（表现为工具 60s 超时；tabs 类 API 不受影响，极具迷惑性）。ad-hoc 签名无付费证书，重启 Safari 后仍需勾「Allow unsigned extensions」——但不再有 24h 过期。
+7. ⚠️ 多客户端互斥：Chrome unpacked、Safari 临时扩展、官方扩展同时只能一个在线（4409）。测试前关掉其他的。
 
 ### extension/ 结构说明
 
@@ -124,7 +125,7 @@
 - `icon/` — 自绘占位图标（无版权问题，后续可换）
 - evaluate 优先 `scripting.executeScript world:"MAIN"`，失败退回 content script 隔离世界 eval
 - ⚠️ 首次 `xcodebuild` 需先 `sudo xcodebuild -license accept`（需用户手动执行）
-- ⚠️ **packager 的已知 bug**：重新生成工程后，App target 的 Bundle ID 会被写成 `com.example.KimiBridgeSafari`（取 app 名）而非传入的 `com.example.kimibridge`，构建报 "Embedded binary's bundle identifier is not prefixed…"。重新生成后必须跑一次修复：
+- ⚠️ **packager 的已知 bug**：重新生成工程后，App target 的 Bundle ID 会被写成 `com.example.KimiBridgeSafari`（取 app 名）而非传入的 `com.example.kimibridge`，构建报 "Embedded binary's bundle identifier is not prefixed…"。重新生成后必须跑一次修复（注意：packager 要打 `dist/safari/` 而非 `extension/`）：
   ```bash
   sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = com\.example\.KimiBridgeSafari;/PRODUCT_BUNDLE_IDENTIFIER = com.example.kimibridge;/g' \
     KimiBridgeSafari/KimiBridgeSafari.xcodeproj/project.pbxproj
