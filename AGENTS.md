@@ -94,10 +94,26 @@
 - [x] 第一批工具（无 CDP 依赖）：navigate / find_tab / list_tabs / list_browser_tabs / attach_tab / close_tab / close_session / evaluate / click / fill / scroll / wait / select_option
 - [x] screenshot（captureVisibleTab；selector 裁剪暂降级为整屏 + note）
 - [x] 降级错误路径：cdp / network / save_as_pdf / mouse_click（返回明确 error）
+- [x] **Safari 实机端到端联调通过**（2026-10-23）：Chrome 对照验证 + Safari 临时扩展验证，navigate/evaluate/click/wait/scroll/screenshot/list_tabs/find_tab/close_session 全链路 OK
 - [ ] snapshot / find（自研 accessibility tree + @e ref）— 最大工作量
 - [ ] read_page / upload / hover / key_type / send_keys / dialog / drag
-- [ ] Safari 实机联调（需先 `sudo xcodebuild -license accept`；Xcode 工程用 packager 命令重新生成，不入库）
+- [ ] Xcode 正式打包分发（当前用临时扩展足够开发；分发需处理 relay 的常驻化）
 - [ ] （可选）iframe 侧边栏 UI
+
+### 联调期关键架构事实（实测，优先级高于通用文档）
+
+1. **daemon Origin 白名单**：WS 握手只认官方扩展 origin，Safari/未打包扩展直连必 403 → 必须运行本地中转 `cd reverse/proxy && node tap.js`（12086 端口，伪装官方 origin 转发 10086）。
+2. **Safari 扩展 SW 不支持 WebSocket**（静默失败）→ Safari 用 MV2 式非持久背景页变体，构建产物在 `dist/safari/`（由 extension/ 拷贝 + manifest 替换 `background.scripts`/`persistent:false`）。改动 extension/ 后重建：
+   ```bash
+   rm -rf dist/safari && mkdir -p dist/safari && cp -R extension/* dist/safari/ && python3 -c "
+   import json; m = json.load(open('extension/manifest.json'))
+   m['background'] = {'scripts': ['background.js'], 'persistent': False}
+   json.dump(m, open('dist/safari/manifest.json','w'), ensure_ascii=False, indent=2)"
+   ```
+3. Safari 安装方式：设置 → Developer → Add Temporary Extension → 选 `dist/safari/`；改代码后 Temporary 列表里点 Reload。
+4. 扩展内自动适配：Safari UA 优先连 relay 12086，Chrome 先直连 10086 失败再回退 relay（background.js `FALLBACK_WS_URLS`）。
+5. 自检面板：工具栏 K 图标 → popup 显示 `dbg_*` 状态（bg_evaluated/ua/connect_attempt/ws_open…）；同时 dbgLog 会 fetch 上报到 relay `/probe`（联调稳定后移除该 fetch）。
+6. ⚠️ 多客户端互斥：Chrome unpacked、Safari 临时扩展、官方扩展同时只能一个在线（4409）。测试前关掉其他的。
 
 ### extension/ 结构说明
 

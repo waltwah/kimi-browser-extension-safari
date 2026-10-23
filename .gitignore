@@ -13,3 +13,6 @@ node_modules/
 
 # --- 生成的 Xcode 工程（可用 packager 随时重新生成） ---
 KimiBridgeSafari/
+
+# --- 构建产物 ---
+dist/

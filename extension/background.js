@@ -19,6 +19,8 @@
 // 联调稳定后整段可删。
 function dbgLog(key, value) {
   try { chrome.storage.local.set({ [`dbg_${key}`]: value }); } catch { /* noop */ }
+  // 同步上报到本地 relay（联调期专用，联调稳定后删除 fetch 行）
+  try { fetch(`http://127.0.0.1:12086/probe?k=${encodeURIComponent(key)}&v=${encodeURIComponent(String(value).slice(0, 200))}`).catch(() => {}); } catch { /* noop */ }
 }
 dbgLog('bg_evaluated', new Date().toISOString());
 self.addEventListener?.('error', (e) => dbgLog('bg_error', String(e.error?.stack || e.message)));
@@ -30,6 +32,19 @@ self.addEventListener?.('unhandledrejection', (e) => dbgLog('bg_rejection', Stri
 
 const DEFAULT_PORT = 10086;
 const DEFAULT_WS_URL = `ws://127.0.0.1:${DEFAULT_PORT}/ws`;
+// Origin 白名单回退链（见 PROTOCOL.md §3）：daemon 只认官方扩展 origin，
+// 直连被 403 时自动回退到本地伪装中转（reverse/proxy/tap.js，默认 12086）。
+// 用户显式设置 local_url 时优先且不再回退。
+// Safari 的 origin（safari-web-extension://）必然不在白名单 → Safari 平台优先走 relay；
+// 且实测 Safari SW 在 WS 被拒后会立即挂起（onerror/onclose 来不及派发），不能依赖失败后回退。
+const FALLBACK_WS_URLS = (() => {
+  const relay = 'ws://127.0.0.1:12086/ws';
+  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+  const isSafari = /Safari/i.test(ua) && !/Chrom(e|ium)/i.test(ua);
+  dbgLog('ua', ua.slice(0, 120));
+  return isSafari ? [relay, DEFAULT_WS_URL] : [DEFAULT_WS_URL, relay];
+})();
+let fallbackIdx = 0;
 
 const STORAGE_CLIENT_ID = 'ws_client_id';       // 首启生成的 UUID，持久化
 const STORAGE_SHOULD_CONNECT = 'ws_should_connect'; // 默认 true
@@ -68,17 +83,16 @@ async function getClientId() {
 async function getWsUrl() {
   const got = await chrome.storage.local.get([STORAGE_LOCAL_URL, STORAGE_SHOULD_CONNECT]);
   const shouldConnect = got[STORAGE_SHOULD_CONNECT] !== false; // 默认 true
-  let url = DEFAULT_WS_URL;
   if (typeof got[STORAGE_LOCAL_URL] === 'string' && got[STORAGE_LOCAL_URL]) {
     // 与官方一致：仅允许 ws/wss 且 127.0.0.1（拒绝 IPv6 [::1] 与其他 127.x）
     try {
       const u = new URL(got[STORAGE_LOCAL_URL]);
       if ((u.protocol === 'ws:' || u.protocol === 'wss:') && u.hostname === '127.0.0.1') {
-        url = got[STORAGE_LOCAL_URL];
+        return { url: got[STORAGE_LOCAL_URL], custom: true, shouldConnect };
       }
-    } catch { /* 忽略非法地址，用默认值 */ }
+    } catch { /* 忽略非法地址，走默认回退链 */ }
   }
-  return { url, shouldConnect };
+  return { url: FALLBACK_WS_URLS[fallbackIdx % FALLBACK_WS_URLS.length], custom: false, shouldConnect };
 }
 
 function sendFrame(obj) {
@@ -102,11 +116,11 @@ function teardownSocket() {
 
 async function connect() {
   if (connecting || (ws && ws.readyState === WebSocket.OPEN)) return;
-  const { url, shouldConnect } = await getWsUrl();
+  connecting = true; // 先占锁再 await，防止并发 connect
+  const { url, custom, shouldConnect } = await getWsUrl();
   dbgLog('connect_attempt', `${url} shouldConnect=${shouldConnect} @ ${new Date().toISOString()}`);
-  if (!shouldConnect) return;
-
-  connecting = true;
+  if (!shouldConnect) { connecting = false; return; }
+  let opened = false;
   const clientId = await getClientId();
   const sock = new WebSocket(`${url}?client=${encodeURIComponent(clientId)}`);
   ws = sock;
@@ -118,11 +132,12 @@ async function connect() {
   }, OPEN_TIMEOUT_MS);
 
   sock.onopen = () => {
+    opened = true;
     clearTimeout(openTimer);
     connecting = false;
     fastRetryCount = 0;
     touchActivity();
-    dbgLog('ws_open', new Date().toISOString());
+    dbgLog('ws_open', `${url} @ ${new Date().toISOString()}`);
     // 握手：open 后立即发 hello（daemon 回 hello_ack，内容忽略）
     sendFrame({ type: 'hello', payload: { extensionVersion: chrome.runtime.getManifest().version } });
   };
@@ -139,6 +154,12 @@ async function connect() {
     dbgLog('ws_close', `${ev.code} ${ev.reason || ''} @ ${new Date().toISOString()}`);
     const wasBusy = ev.code === CLOSE_CODE_BUSY;
     teardownSocket();
+    // 未 open 就失败（如 daemon Origin 白名单 403）且非用户自定义地址 → 沿回退链换下一个地址立即重试
+    if (!opened && !custom && !wasBusy) {
+      fallbackIdx++;
+      fastRetryTimer = setTimeout(() => { void reconcile(); }, 500);
+      return;
+    }
     // 4409 = daemon 已被另一浏览器占用：不做快速重试，只等周期 reconcile
     if (!wasBusy && fastRetryCount < FAST_RETRY_MS.length) {
       const delay = FAST_RETRY_MS[fastRetryCount++];
@@ -245,22 +266,17 @@ async function resolveTabId(args) {
   return active.id;
 }
 
-/** 等待 tab 加载完成（tabs.onUpdated status=complete），超时 30s */
-function waitForTabLoad(tabId, timeoutMs = 30_000) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      chrome.tabs.onUpdated.removeListener(listener);
-      reject(new Error('navigate: page load timeout (30s)'));
-    }, timeoutMs);
-    const listener = (id, changeInfo) => {
-      if (id === tabId && changeInfo.status === 'complete') {
-        clearTimeout(timer);
-        chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
-      }
-    };
-    chrome.tabs.onUpdated.addListener(listener);
-  });
+/** 等待 tab 加载完成：轮询 tabs.get（Safari 的 tabs.onUpdated 时序不可靠），30s 超时 */
+async function waitForTabLoad(tabId, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      if (tab.status === 'complete') return;
+    } catch { /* tab 可能已关闭 */ return; }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  throw new Error('navigate: page load timeout (30s)');
 }
 
 /** find_tab 的域名后缀匹配：kimi.com 也能匹配 www.kimi.com，忽略 path；query 可不带 scheme */
@@ -288,6 +304,7 @@ async function sendToPage(tabId, cmd, params) {
     await chrome.scripting.executeScript({ target: { tabId }, files: ['content-scripts/bridge.js'] });
     reply = await chrome.tabs.sendMessage(tabId, message);
   }
+  dbgLog('page_reply', `${cmd} -> ${JSON.stringify(reply)?.slice(0, 150) ?? String(reply)}`);
   if (reply && reply.__error) throw new Error(reply.__error);
   return reply;
 }
@@ -402,16 +419,18 @@ registerTool('evaluate', async (args) => {
   // 官方用语义：在页面主 realm 执行（共享页面 JS 环境）。
   // Safari 降级路径：优先 MAIN world（支持时），失败则退回隔离世界的 content script eval。
   try {
-    const [res] = await chrome.scripting.executeScript({
+    const execResult = await chrome.scripting.executeScript({
       target: { tabId },
       world: 'MAIN',
       func: (code) => (0, eval)(code), // eslint-disable-line no-eval
       args: [args.code],
     });
-    const value = res?.result;
+    dbgLog('evaluate_main', JSON.stringify(execResult)?.slice(0, 150));
+    const value = execResult?.[0]?.result;
     return { type: typeof value, value };
   } catch (err) {
     // MAIN world 不可用（老版 Safari）或页面 CSP 阻断 eval → 退回 content script
+    dbgLog('evaluate_fallback', String(err?.message || err).slice(0, 150));
     try {
       return await sendToPage(tabId, 'evaluate', { code: args.code, max_chars: args.max_chars });
     } catch {

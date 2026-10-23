@@ -76,6 +76,17 @@
     --swift --macos-only --copy-resources --no-open --force
   ```
 
+### 实机联调实证（2026-10-23，Safari 26.6.2）
+
+调研期文档没覆盖到的**实测结论**：
+
+1. **daemon 有 Origin 白名单**：WS 握手只接受官方扩展 ID 的 `chrome-extension://` origin，其余一律 403。Safari 扩展（`safari-web-extension://` origin）**必须走本地 Origin 伪装中转**（`reverse/proxy/tap.js`，12086 端口）。
+2. **Safari 扩展 Service Worker 里 WebSocket 不可用**（静默失败：不 open 也不 error，SW 随即被挂起）→ 必须用 **MV2 式非持久背景页**（`background.scripts + persistent:false`，MV3 manifest 下 Safari 接受）。同一套 JS 代码两种形态通吃；`dist/safari/` 为 Safari 构建变体。
+3. Safari 的 `tabs.onUpdated` 时序不可靠 → 页面加载等待改用 250ms 轮询 `tabs.get().status`。
+4. `tabs.captureVisibleTab`、`scripting.executeScript`（含 `world:"MAIN"`）、content script `sendMessage`（sendResponse + return true）在 Safari 26 均验证可用。
+5. 工具栏 popup 在背景页形态下正常打开。
+6. Xcode 工程路径与「临时扩展」路径独立；迭代 JS 代码用临时扩展（Reload 即生效），不需要每次 ⌘R。
+
 ## 6. 建议的技术路线
 
 1. **MVP**：标准 MV3 Web Extension（可先 Chrome 调试、Safari 临时安装验证），先实现 content script 动作层（click / fill / extract / snapshot）+ `tabs.captureVisibleTab` 截图 + iframe 注入式侧边栏。
