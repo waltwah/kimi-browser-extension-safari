@@ -13,8 +13,7 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "KimiBridgeSafari 自检",
-    "default_popup": "popup.html"
+    "default_title": "切换 Kimi 侧边栏"
   },
   "content_scripts": [
     {
@@ -22,6 +21,18 @@
       "js": ["content-scripts/bridge.js"],
       "run_at": "document_idle",
       "all_frames": false
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content-scripts/sidebar.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["sidebar.html"],
+      "matches": ["<all_urls>"]
     }
   ],
   "permissions": [

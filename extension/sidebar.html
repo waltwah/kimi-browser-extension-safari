@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Kimi Bridge 侧边栏</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; font: 13px/1.5 -apple-system, "PingFang SC", sans-serif; }
+  body { display: flex; flex-direction: column; background: #fff; }
+  header {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    border-bottom: 1px solid #e5e5e5; flex: none;
+  }
+  header .dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; flex: none; }
+  header .dot.on { background: #34c759; }
+  header .title { font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; }
+  header button {
+    border: 1px solid #ddd; background: #f7f7f7; border-radius: 6px;
+    padding: 3px 8px; cursor: pointer; font-size: 12px;
+  }
+  header button:hover { background: #eee; }
+  #kimiFrame { flex: 1; border: 0; width: 100%; }
+  details { flex: none; border-top: 1px solid #e5e5e5; }
+  summary { padding: 6px 10px; cursor: pointer; color: #666; user-select: none; }
+  .panel { padding: 8px 10px; max-height: 40vh; overflow: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 11px; }
+  td { padding: 2px 4px; border-bottom: 1px solid #f0f0f0; vertical-align: top; word-break: break-all; }
+  td:first-child { color: #888; white-space: nowrap; }
+  .row { display: flex; gap: 6px; margin-top: 8px; }
+  .row input {
+    flex: 1; border: 1px solid #ddd; border-radius: 6px; padding: 4px 8px; font-size: 12px;
+  }
+  .row button {
+    border: 1px solid #ddd; background: #f7f7f7; border-radius: 6px;
+    padding: 4px 10px; cursor: pointer; font-size: 12px;
+  }
+  .hint { color: #999; font-size: 11px; margin-top: 6px; }
+</style>
+</head>
+<body>
+  <header>
+    <span class="dot" id="dot"></span>
+    <span class="title" id="title">Kimi Bridge — 未连接</span>
+    <button id="openTab" title="在新标签页打开 kimi.com">↗</button>
+    <button id="closeBtn" title="收起侧边栏">✕</button>
+  </header>
+  <iframe id="kimiFrame" src="https://www.kimi.com/"></iframe>
+  <details>
+    <summary>连接状态 / 设置</summary>
+    <div class="panel">
+      <table id="dbg"><tr><td colspan="2">加载中…</td></tr></table>
+      <div class="row">
+        <input id="wsUrl" placeholder="ws://127.0.0.1:12086/ws（留空=自动回退链）">
+        <button id="saveUrl">保存并重载</button>
+      </div>
+      <div class="hint">Safari 必须经本地 relay（默认 12086）伪装 Origin 后才能连 daemon。</div>
+    </div>
+  </details>
+  <script src="sidebar.js"></script>
+</body>
+</html>

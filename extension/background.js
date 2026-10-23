@@ -624,5 +624,21 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.runtime.onStartup.addListener(() => void reconcile());
 chrome.runtime.onInstalled.addListener(() => void reconcile());
 
+// 工具栏点击 → 在当前标签页切换侧边栏（官方 Chrome 版是 sidePanel，Safari 无此 API，用注入式侧边栏）
+chrome.action.onClicked.addListener(async (tab) => {
+  if (!tab?.id) return;
+  try {
+    await chrome.tabs.sendMessage(tab.id, { __kimiSidebar: true, cmd: 'toggle' }, { frameId: 0 });
+  } catch {
+    // 页面尚未注入 sidebar.js（早于扩展加载）→ 注入后重试
+    try {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, files: ['content-scripts/sidebar.js'] });
+      await chrome.tabs.sendMessage(tab.id, { __kimiSidebar: true, cmd: 'toggle' }, { frameId: 0 });
+    } catch (err) {
+      dbgLog('sidebar_error', String(err?.message || err));
+    }
+  }
+});
+
 // service worker 启动（含被 alarm 唤醒）时立即 reconcile 一次
 void reconcile();

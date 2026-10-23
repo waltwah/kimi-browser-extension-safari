@@ -99,7 +99,7 @@
 - [x] **upload / hover / key_type / send_keys / dialog / drag**（2026-10-23 Safari 实机验收：Enter 提交表单跳页、dialog MAIN-world 预拦截 confirm、upload base64 注入文件全过）→ **25 工具全覆盖**
 - [x] **relay 产品化 + launchd 常驻**（2026-10-23：`relay/relay.js` 零依赖 Origin 伪装中转，已装 `com.kimibridgesafari.relay` LaunchAgent，登录自启、崩溃自动拉起）
 - [x] **Xcode 正式打包**（2026-10-23：packager 打 `dist/safari/` → 修 Bundle ID bug → ad-hoc 签名构建 → /Applications/KimiBridgeSafari.app；已启用并通过端到端验收）
-- [ ] （可选）iframe 侧边栏 UI
+- [x] **iframe 侧边栏 UI**（2026-10-23：工具栏图标切换，Shadow DOM 注入，内嵌 kimi.com 复用登录态；左缘拖拽调宽 280px~窗口1/3 持久化；底部折叠连接状态/设置面板，原 popup 已并入并删除）
 
 ### 联调期关键架构事实（实测，优先级高于通用文档）
 
