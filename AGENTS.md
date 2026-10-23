@@ -97,12 +97,13 @@
 - [x] **Safari 实机端到端联调通过**（2026-10-23）：Chrome 对照验证 + Safari 临时扩展验证，navigate/evaluate/click/wait/scroll/screenshot/list_tabs/find_tab/close_session 全链路 OK
 - [x] **snapshot / find / read_page + @eN ref 体系**（2026-10-23 Safari 实机验收通过：aria 树/stable-node/截断游标续读/find 匹配/ref 定位 fill 全链路 OK）
 - [x] **upload / hover / key_type / send_keys / dialog / drag**（2026-10-23 Safari 实机验收：Enter 提交表单跳页、dialog MAIN-world 预拦截 confirm、upload base64 注入文件全过）→ **25 工具全覆盖**
-- [ ] Xcode 正式打包分发（当前用临时扩展足够开发；分发需处理 relay 的常驻化）
+- [x] **relay 产品化 + launchd 常驻**（2026-10-23：`relay/relay.js` 零依赖 Origin 伪装中转，已装 `com.kimibridgesafari.relay` LaunchAgent，登录自启、崩溃自动拉起）
+- [ ] Xcode 正式打包分发（当前用临时扩展足够开发）
 - [ ] （可选）iframe 侧边栏 UI
 
 ### 联调期关键架构事实（实测，优先级高于通用文档）
 
-1. **daemon Origin 白名单**：WS 握手只认官方扩展 origin，Safari/未打包扩展直连必 403 → 必须运行本地中转 `cd reverse/proxy && node tap.js`（12086 端口，伪装官方 origin 转发 10086）。
+1. **daemon Origin 白名单**：WS 握手只认官方扩展 origin，Safari/未打包扩展直连必 403 → 需要本地 Origin 伪装中转。**生产版**：`relay/relay.js`（零依赖，已 launchd 常驻，见 `relay/install.sh`，卸载 `--uninstall`）；**开发抓包版**：`cd reverse/proxy && node tap.js`（帧日志到 captures/，与常驻 relay 同占 12086，用前停服务或设 `KIMI_RELAY_PORT`）。
 2. **Safari 扩展 SW 不支持 WebSocket**（静默失败）→ Safari 用 MV2 式非持久背景页变体，构建产物在 `dist/safari/`（由 extension/ 拷贝 + manifest 替换 `background.scripts`/`persistent:false`）。改动 extension/ 后重建：
    ```bash
    rm -rf dist/safari && mkdir -p dist/safari && cp -R extension/* dist/safari/ && python3 -c "
