@@ -1,0 +1,12 @@
+# --- 逆向产物（含 Moonshot 版权代码/抓包数据，不入库） ---
+reverse/ext/
+reverse/skill/
+reverse/kimi-webbridge-skill.tar.gz
+reverse/proxy/captures/
+
+# --- 依赖与缓存 ---
+node_modules/
+.npm-cache/
+
+# --- 系统 ---
+.DS_Store
