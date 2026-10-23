@@ -502,6 +502,27 @@ registerTool('select_option', async (args) => {
   return await sendToPage(tabId, 'select_option', { selector: args.selector, values: args.values, value: args.value });
 });
 
+registerTool('snapshot', async (args) => {
+  const tabId = await resolveTabId(args);
+  return await sendToPage(tabId, 'snapshot', {
+    ref: args.ref, format: args.format, max_chars: args.max_chars,
+    cursor: args.cursor, interactive: args.interactive,
+  });
+});
+
+registerTool('find', async (args) => {
+  if (!args.query) throw new Error('find: query is required');
+  const tabId = await resolveTabId(args);
+  return await sendToPage(tabId, 'find', { query: args.query });
+});
+
+registerTool('read_page', async (args) => {
+  const tabId = await resolveTabId(args);
+  return await sendToPage(tabId, 'read_page', {
+    max_chars: args.max_chars, start: args.start, frame: args.frame,
+  });
+});
+
 // --- 明确降级：CDP 依赖工具（Safari 无 chrome.debugger） --------------------
 // 错误消息写明原因，daemon 会包装成 ok:false 返回给 Agent。
 
@@ -511,8 +532,8 @@ registerTool('network', async () => { throw new Error(`network: ${UNSUPPORTED_CD
 registerTool('save_as_pdf', async () => { throw new Error(`save_as_pdf: ${UNSUPPORTED_CDP}`); });
 registerTool('mouse_click', async () => { throw new Error(`mouse_click: ${UNSUPPORTED_CDP}; use click (synthetic DOM click) instead`); });
 
-// 尚未实现的工具（后续批次）：snapshot / find / read_page / upload / hover /
-// key_type / send_keys / dialog / drag —— 由 dispatchTool 统一回 Unknown tool。
+// 尚未实现的工具（后续批次）：upload / hover / key_type / send_keys / dialog / drag
+// —— 由 dispatchTool 统一回 Unknown tool。
 
 // ---------------------------------------------------------------------------
 // 生命周期：alarms 驱动 reconcile（MV3 非持久 background 保活）
