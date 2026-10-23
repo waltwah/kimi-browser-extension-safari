@@ -15,6 +15,15 @@
 
 'use strict';
 
+// --- 调试自检（骨架联调期）：记录启动/连接状态到 storage.local，popup 可读 ----
+// 联调稳定后整段可删。
+function dbgLog(key, value) {
+  try { chrome.storage.local.set({ [`dbg_${key}`]: value }); } catch { /* noop */ }
+}
+dbgLog('bg_evaluated', new Date().toISOString());
+self.addEventListener?.('error', (e) => dbgLog('bg_error', String(e.error?.stack || e.message)));
+self.addEventListener?.('unhandledrejection', (e) => dbgLog('bg_rejection', String(e.reason?.stack || e.reason)));
+
 // ---------------------------------------------------------------------------
 // 常量与存储键（键名与官方扩展保持一致，便于同机共存时互不干扰地各自存储）
 // ---------------------------------------------------------------------------
@@ -94,6 +103,7 @@ function teardownSocket() {
 async function connect() {
   if (connecting || (ws && ws.readyState === WebSocket.OPEN)) return;
   const { url, shouldConnect } = await getWsUrl();
+  dbgLog('connect_attempt', `${url} shouldConnect=${shouldConnect} @ ${new Date().toISOString()}`);
   if (!shouldConnect) return;
 
   connecting = true;
@@ -112,6 +122,7 @@ async function connect() {
     connecting = false;
     fastRetryCount = 0;
     touchActivity();
+    dbgLog('ws_open', new Date().toISOString());
     // 握手：open 后立即发 hello（daemon 回 hello_ack，内容忽略）
     sendFrame({ type: 'hello', payload: { extensionVersion: chrome.runtime.getManifest().version } });
   };
@@ -125,6 +136,7 @@ async function connect() {
 
   sock.onclose = (ev) => {
     clearTimeout(openTimer);
+    dbgLog('ws_close', `${ev.code} ${ev.reason || ''} @ ${new Date().toISOString()}`);
     const wasBusy = ev.code === CLOSE_CODE_BUSY;
     teardownSocket();
     // 4409 = daemon 已被另一浏览器占用：不做快速重试，只等周期 reconcile
@@ -136,6 +148,7 @@ async function connect() {
 
   sock.onerror = () => {
     // onclose 会随后触发，统一在那里处理重连
+    dbgLog('ws_error', new Date().toISOString());
   };
 }
 
@@ -250,11 +263,11 @@ function waitForTabLoad(tabId, timeoutMs = 30_000) {
   });
 }
 
-/** find_tab 的域名后缀匹配：kimi.com 也能匹配 www.kimi.com，忽略 path */
+/** find_tab 的域名后缀匹配：kimi.com 也能匹配 www.kimi.com，忽略 path；query 可不带 scheme */
 function hostMatches(tabUrl, queryUrl) {
   try {
     const a = new URL(tabUrl).hostname.replace(/^www\./, '');
-    const b = new URL(queryUrl).hostname.replace(/^www\./, '');
+    const b = new URL(/^https?:\/\//.test(queryUrl) ? queryUrl : `https://${queryUrl}`).hostname.replace(/^www\./, '');
     return a === b || a.endsWith('.' + b) || b.endsWith('.' + a);
   } catch {
     return false;

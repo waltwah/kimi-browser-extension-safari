@@ -116,10 +116,14 @@ kimi-webbridge daemon（Go，127.0.0.1:10086，~/.kimi-webbridge/）
 
 ## 3. 安全模型
 
-1. WS 零鉴权，依赖 loopback + 单客户端（4409）。
-2. daemon 二进制含 allowlist.go；扩展侧对自定义连接地址有 ws/wss + 127.0.0.1 白名单校验与信任确认对话框。
-3. manifest CSP 需允许 `connect-src ws://*:* wss://*:* http://*:* https://*:*`（Safari 移植时照抄）。
-4. `cdp` 工具拒绝 `Target.activateTarget`；`Page.bringToFront` 优先用 focus emulation。
+1. WS 无 token/签名，但 **daemon 校验 WS 握手的 Origin 头白名单**（v2.0.23 实测）：
+   - 只接受官方扩展 ID 的 origin（二进制硬编码：`fldmhceldgbpfpkbgopacenieobmligc` = Chrome 官方，另有两个 ID 疑为 Edge/其他渠道）
+   - 无 Origin、随机 `chrome-extension://*`、其他 scheme → **HTTP 403 拒绝升级**（浏览器侧表现为 WS error + close 1006）
+   - **对 Safari 移植的影响**：Safari 扩展 origin 为 `safari-web-extension://<uuid>`，必被 403。**解决方案：本地 Origin 伪装中转**——扩展连 `ws://127.0.0.1:12086/ws`（自研 relay），relay 以官方 Origin 转发到 daemon。已实现并验证：`reverse/proxy/tap.js`（fake safari origin → 收到 hello_ack）。
+2. 其余防护：loopback 绑定 + daemon 单客户端（4409）。
+3. 扩展侧对自定义连接地址有 ws/wss + 127.0.0.1 白名单校验与信任确认对话框。
+4. manifest CSP 需允许 `connect-src ws://*:* wss://*:* http://*:* https://*:*`（Safari 移植时照抄）。
+5. `cdp` 工具拒绝 `Target.activateTarget`；`Page.bringToFront` 优先用 focus emulation。
 
 ## 4. Safari 移植影响总结
 

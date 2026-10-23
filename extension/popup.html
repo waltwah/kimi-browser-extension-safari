@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 12px -apple-system, monospace; min-width: 340px; margin: 0; padding: 12px; }
+  h1 { font-size: 13px; margin: 0 0 8px; }
+  table { border-collapse: collapse; width: 100%; }
+  td { padding: 3px 6px; border-bottom: 1px solid #eee; vertical-align: top; word-break: break-all; }
+  td:first-child { color: #666; white-space: nowrap; }
+  .hint { color: #999; margin-top: 8px; font-size: 11px; }
+  input { width: 100%; box-sizing: border-box; font: 12px monospace; padding: 4px; }
+  button { margin-top: 4px; padding: 3px 10px; }
+  #conn { margin: 10px 0; padding: 8px; background: #f6f6f6; border-radius: 6px; }
+</style>
+</head>
+<body>
+  <h1>KimiBridgeSafari 自检</h1>
+  <div id="conn">
+    连接地址（留空 = 默认 ws://127.0.0.1:10086/ws）：
+    <input id="url" placeholder="ws://127.0.0.1:12086/ws">
+    <button id="save">保存并重载扩展</button>
+    <button id="reset">恢复默认并重载</button>
+  </div>
+  <table id="t"></table>
+  <div class="hint">每 2s 自动刷新。把本页内容截图或复制给开发者。</div>
+  <script src="popup.js"></script>
+</body>
+</html>

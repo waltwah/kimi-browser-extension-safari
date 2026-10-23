@@ -107,3 +107,8 @@
 - `icon/` — 自绘占位图标（无版权问题，后续可换）
 - evaluate 优先 `scripting.executeScript world:"MAIN"`，失败退回 content script 隔离世界 eval
 - ⚠️ 首次 `xcodebuild` 需先 `sudo xcodebuild -license accept`（需用户手动执行）
+- ⚠️ **packager 的已知 bug**：重新生成工程后，App target 的 Bundle ID 会被写成 `com.example.KimiBridgeSafari`（取 app 名）而非传入的 `com.example.kimibridge`，构建报 "Embedded binary's bundle identifier is not prefixed…"。重新生成后必须跑一次修复：
+  ```bash
+  sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = com\.example\.KimiBridgeSafari;/PRODUCT_BUNDLE_IDENTIFIER = com.example.kimibridge;/g' \
+    KimiBridgeSafari/KimiBridgeSafari.xcodeproj/project.pbxproj
+  ```

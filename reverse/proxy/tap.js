@@ -7,6 +7,8 @@ const { WebSocketServer, WebSocket } = require('ws');
 
 const LISTEN_PORT = 12086;
 const TARGET = 'http://127.0.0.1:10086';
+// daemon 校验 WS Origin 白名单（仅官方扩展 ID，见 PROTOCOL.md §3）→ 中转时代理伪装成官方 Origin
+const SPOOF_ORIGIN = 'chrome-extension://fldmhceldgbpfpkbgopacenieobmligc';
 const outDir = path.join(__dirname, 'captures');
 fs.mkdirSync(outDir, { recursive: true });
 const logFile = path.join(outDir, `capture-${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`);
@@ -42,7 +44,7 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocketServer({ server });
 wss.on('connection', (clientWs, req) => {
   log({ kind: 'ws', dir: 'connect', url: req.url, headers: { origin: req.headers.origin, 'user-agent': req.headers['user-agent'], protocols: req.headers['sec-websocket-protocol'] } });
-  const targetWs = new WebSocket(TARGET + req.url, { headers: { origin: req.headers.origin } });
+  const targetWs = new WebSocket(TARGET + req.url, { headers: { origin: SPOOF_ORIGIN } });
   const pending = [];
   targetWs.on('open', () => { pending.splice(0).forEach((m) => targetWs.send(m)); });
   targetWs.on('message', (data, isBinary) => {
