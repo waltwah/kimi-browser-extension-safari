@@ -96,7 +96,7 @@
 - [x] 降级错误路径：cdp / network / save_as_pdf / mouse_click（返回明确 error）
 - [x] **Safari 实机端到端联调通过**（2026-10-23）：Chrome 对照验证 + Safari 临时扩展验证，navigate/evaluate/click/wait/scroll/screenshot/list_tabs/find_tab/close_session 全链路 OK
 - [x] **snapshot / find / read_page + @eN ref 体系**（2026-10-23 Safari 实机验收通过：aria 树/stable-node/截断游标续读/find 匹配/ref 定位 fill 全链路 OK）
-- [ ] upload / hover / key_type / send_keys / dialog / drag
+- [x] **upload / hover / key_type / send_keys / dialog / drag**（2026-10-23 Safari 实机验收：Enter 提交表单跳页、dialog MAIN-world 预拦截 confirm、upload base64 注入文件全过）→ **25 工具全覆盖**
 - [ ] Xcode 正式打包分发（当前用临时扩展足够开发；分发需处理 relay 的常驻化）
 - [ ] （可选）iframe 侧边栏 UI
 
@@ -119,7 +119,7 @@
 
 - `manifest.json` — MV3；权限 tabs/activeTab/storage/alarms/scripting + `<all_urls>`；CSP 照抄官方
 - `background.js` — 单文件：WS 连接管理（client UUID、hello、ping/pong、45s 死链、alarms 30s reconcile、1s/3s 快重试、4409 不快重试）+ 工具注册表 + 后台侧工具（tabs 系列、navigate、evaluate、screenshot）+ DOM 工具转发
-- `content-scripts/bridge.js` — DOM 执行层 + 自研可达性快照：click / fill / scroll / wait / select_option / evaluate 兜底 / snapshot / find / read_page；`@eN` ref 用 WeakMap 实现 stable-node（同节点跨快照同 ref，页面生命周期内有效）
+- `content-scripts/bridge.js` — DOM 执行层 + 自研可达性快照：click / fill / scroll / wait / select_option / evaluate 兜底 / snapshot / find / read_page / hover / key_type / send_keys / drag / upload；`@eN` ref 用 WeakMap 实现 stable-node（同节点跨快照同 ref，页面生命周期内有效）
 - `icon/` — 自绘占位图标（无版权问题，后续可换）
 - evaluate 优先 `scripting.executeScript world:"MAIN"`，失败退回 content script 隔离世界 eval
 - ⚠️ 首次 `xcodebuild` 需先 `sudo xcodebuild -license accept`（需用户手动执行）

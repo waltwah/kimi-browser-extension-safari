@@ -359,6 +359,8 @@
   function cmdClick(params) {
     const el = resolveElement(params.selector);
     el.scrollIntoView({ block: 'center', inline: 'center' });
+    // Safari 实测：合成 el.click() 不会转移焦点（Chrome 会）→ 显式 focus，保证 key_type/send_keys 有目标
+    if (typeof el.focus === 'function') el.focus();
     el.click();
     const { tag, text } = describe(el);
     return { success: true, tag, text };
@@ -471,6 +473,173 @@
   }
 
   // =========================================================================
+  // hover / key_type / send_keys / drag / upload（合成事件降级，isTrusted=false）
+  // =========================================================================
+
+  function centerOf(el) {
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
+  function cmdHover(params) {
+    const el = resolveElement(params.selector);
+    el.scrollIntoView({ block: 'center', inline: 'center' });
+    const { x, y } = centerOf(el);
+    for (const type of ['mouseover', 'mouseenter', 'mousemove']) {
+      el.dispatchEvent(new MouseEvent(type, { bubbles: type !== 'mouseenter', cancelable: true, clientX: x, clientY: y, view: window }));
+    }
+    return { success: true };
+  }
+
+  function cmdKeyType(params) {
+    const text = params.text;
+    if (typeof text !== 'string' || !text) throw new Error('key_type: text is required');
+    const el = document.activeElement;
+    if (!el || el === document.body) throw new Error('key_type: no focused element (click/fill the target first)');
+
+    if (el.isContentEditable) {
+      el.focus();
+      document.execCommand('insertText', false, text);
+      return { success: true, chars: text.length, mode: 'contenteditable' };
+    }
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+      const start = el.selectionStart ?? el.value.length;
+      const end = el.selectionEnd ?? el.value.length;
+      const proto = el instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+      const next = el.value.slice(0, start) + text + el.value.slice(end);
+      if (setter) setter.call(el, next); else el.value = next;
+      el.selectionStart = el.selectionEnd = start + text.length;
+      el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+      return { success: true, chars: text.length, mode: 'insert' };
+    }
+    throw new Error('key_type: focused element is not editable');
+  }
+
+  const KEY_DEFS = {
+    Enter: { key: 'Enter', code: 'Enter', keyCode: 13 },
+    Tab: { key: 'Tab', code: 'Tab', keyCode: 9 },
+    Escape: { key: 'Escape', code: 'Escape', keyCode: 27 },
+    Backspace: { key: 'Backspace', code: 'Backspace', keyCode: 8 },
+    Delete: { key: 'Delete', code: 'Delete', keyCode: 46 },
+    ArrowUp: { key: 'ArrowUp', code: 'ArrowUp', keyCode: 38 },
+    ArrowDown: { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40 },
+    ArrowLeft: { key: 'ArrowLeft', code: 'ArrowLeft', keyCode: 37 },
+    ArrowRight: { key: 'ArrowRight', code: 'ArrowRight', keyCode: 39 },
+    Space: { key: ' ', code: 'Space', keyCode: 32 },
+    Home: { key: 'Home', code: 'Home', keyCode: 36 },
+    End: { key: 'End', code: 'End', keyCode: 35 },
+    PageUp: { key: 'PageUp', code: 'PageUp', keyCode: 33 },
+    PageDown: { key: 'PageDown', code: 'PageDown', keyCode: 34 },
+  };
+
+  function moveFocus(forward) {
+    const focusables = [...document.querySelectorAll('a[href],button,input,textarea,select,[tabindex],[contenteditable]')]
+      .filter((el) => isVisible(el) && !el.disabled && el.tabIndex >= 0);
+    const idx = focusables.indexOf(document.activeElement);
+    const next = focusables[(idx + (forward ? 1 : -1) + focusables.length) % focusables.length];
+    next?.focus();
+    return !!next;
+  }
+
+  function cmdSendKeys(params) {
+    const keys = params.keys;
+    if (typeof keys !== 'string' || !keys) throw new Error('send_keys: keys is required');
+    const repeat = Math.max(1, Math.min(50, params.repeat ?? 1));
+    const target = document.activeElement && document.activeElement !== document.body ? document.activeElement : document.body;
+
+    for (let i = 0; i < repeat; i++) {
+      // 解析 "Mod+Shift+A" 组合
+      const parts = keys.split('+').map((s) => s.trim());
+      const main = parts.pop();
+      const mods = { metaKey: false, shiftKey: false, altKey: false, ctrlKey: false };
+      for (const m of parts) {
+        if (/^(mod|cmd|meta|command)$/i.test(m)) mods.metaKey = true; // Mod=macOS ⌘
+        else if (/^shift$/i.test(m)) mods.shiftKey = true;
+        else if (/^(alt|option)$/i.test(m)) mods.altKey = true;
+        else if (/^(ctrl|control)$/i.test(m)) mods.ctrlKey = true;
+        else throw new Error(`send_keys: unknown modifier: ${m}`);
+      }
+
+      // 特例：Mod+A 全选（合成事件无法触发原生选择，用 execCommand）
+      if (mods.metaKey && /^a$/i.test(main)) {
+        target.focus?.();
+        document.execCommand('selectAll', false, null);
+        continue;
+      }
+
+      const def = KEY_DEFS[main] || (main.length === 1
+        ? { key: mods.shiftKey ? main.toUpperCase() : main, code: `Key${main.toUpperCase()}`, keyCode: main.toUpperCase().charCodeAt(0) }
+        : null);
+      if (!def) throw new Error(`send_keys: unsupported key: ${main}`);
+
+      const init = { ...def, ...mods, bubbles: true, cancelable: true, view: window };
+      // KeyboardEvent 构造不接受 keyCode；用 defineProperty 兼容读取 keyCode 的旧代码
+      for (const type of ['keydown', 'keypress', 'keyup']) {
+        const ev = new KeyboardEvent(type, init);
+        Object.defineProperty(ev, 'keyCode', { get: () => def.keyCode });
+        Object.defineProperty(ev, 'which', { get: () => def.keyCode });
+        target.dispatchEvent(ev);
+        if (type === 'keydown' && ev.defaultPrevented) break;
+      }
+
+      // 特例：Tab 手动移动焦点（合成事件不触发原生焦点迁移）
+      if (main === 'Tab') moveFocus(!mods.shiftKey);
+      // 特例：Enter 在表单内提交（对齐用户预期；原生键盘会触发 submit）
+      if (main === 'Enter' && target instanceof HTMLElement && target.form instanceof HTMLFormElement) {
+        target.form.requestSubmit?.();
+      }
+    }
+    return { success: true, keys, repeat };
+  }
+
+  function cmdDrag(params) {
+    const from = resolveElement(params.from);
+    const to = resolveElement(params.to);
+    from.scrollIntoView({ block: 'center', inline: 'center' });
+    to.scrollIntoView({ block: 'center', inline: 'center' });
+    const a = centerOf(from);
+    const b = centerOf(to);
+    const dt = new DataTransfer();
+    const opt = (extra) => ({ bubbles: true, cancelable: true, view: window, dataTransfer: dt, ...extra });
+    // HTML5 DnD 序列
+    from.dispatchEvent(new DragEvent('dragstart', opt({ clientX: a.x, clientY: a.y })));
+    to.dispatchEvent(new DragEvent('dragenter', opt({ clientX: b.x, clientY: b.y })));
+    to.dispatchEvent(new DragEvent('dragover', opt({ clientX: b.x, clientY: b.y })));
+    to.dispatchEvent(new DragEvent('drop', opt({ clientX: b.x, clientY: b.y })));
+    from.dispatchEvent(new DragEvent('dragend', opt({ clientX: b.x, clientY: b.y })));
+    return { success: true };
+  }
+
+  function cmdUpload(params) {
+    const el = resolveElement(params.selector);
+    if (!(el instanceof HTMLInputElement) || el.type !== 'file') {
+      throw new Error('upload: target is not a file input');
+    }
+    if (params.files?.length) {
+      // 绝对路径需浏览器进程读盘（官方走 CDP DOM.setFileInputFiles），Safari 做不到
+      throw new Error('upload: filesystem paths require CDP; on Safari provide base64 _payloads instead');
+    }
+    const payloads = params._payloads;
+    if (!Array.isArray(payloads) || !payloads.length) {
+      throw new Error('upload: _payloads (base64) is required on Safari');
+    }
+    const dt = new DataTransfer();
+    for (const p of payloads) {
+      // 兼容两种形态："base64字符串" 或 {name, data, mimeType}
+      const name = typeof p === 'string' ? 'upload.bin' : (p.name || 'upload.bin');
+      const b64 = typeof p === 'string' ? p : p.data;
+      const mime = typeof p === 'string' ? 'application/octet-stream' : (p.mimeType || 'application/octet-stream');
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      dt.items.add(new File([bytes], name, { type: mime }));
+    }
+    el.files = dt.files;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return { success: true, fileCount: dt.files.length };
+  }
+
+  // =========================================================================
   // 消息分发
   // =========================================================================
 
@@ -484,6 +653,11 @@
     snapshot: cmdSnapshot,
     find: cmdFind,
     read_page: cmdReadPage,
+    hover: cmdHover,
+    key_type: cmdKeyType,
+    send_keys: cmdSendKeys,
+    drag: cmdDrag,
+    upload: cmdUpload,
   };
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

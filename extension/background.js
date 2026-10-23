@@ -296,14 +296,18 @@ function hostMatches(tabUrl, queryUrl) {
 
 async function sendToPage(tabId, cmd, params) {
   const message = { __kimiBridge: true, cmd, params };
+  // Safari 实测：不指定 frameId 时，若页面含 iframe，sendMessage 可能 resolve undefined
+  // （某个无监听器的 frame 抢先"响应"）→ 显式锁顶层 frame，且 undefined 视为未送达。
   let reply;
   try {
-    reply = await chrome.tabs.sendMessage(tabId, message);
-  } catch (err) {
-    // content script 可能尚未注入（页面早于扩展加载）→ 注入后重试一次
-    await chrome.scripting.executeScript({ target: { tabId }, files: ['content-scripts/bridge.js'] });
-    reply = await chrome.tabs.sendMessage(tabId, message);
+    reply = await chrome.tabs.sendMessage(tabId, message, { frameId: 0 });
+  } catch { reply = undefined; }
+  if (reply === undefined) {
+    // content script 未注入（页面早于扩展加载 / 注入竞态）→ 注入后重试一次
+    await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, files: ['content-scripts/bridge.js'] });
+    reply = await chrome.tabs.sendMessage(tabId, message, { frameId: 0 });
   }
+  if (reply === undefined) throw new Error(`${cmd}: no response from content script (top frame)`);
   dbgLog('page_reply', `${cmd} -> ${JSON.stringify(reply)?.slice(0, 150) ?? String(reply)}`);
   if (reply && reply.__error) throw new Error(reply.__error);
   return reply;
@@ -523,6 +527,81 @@ registerTool('read_page', async (args) => {
   });
 });
 
+registerTool('hover', async (args) => {
+  if (!args.selector) throw new Error('hover: selector is required');
+  const tabId = await resolveTabId(args);
+  return await sendToPage(tabId, 'hover', { selector: args.selector });
+});
+
+registerTool('key_type', async (args) => {
+  if (typeof args.text !== 'string') throw new Error('key_type: text is required');
+  const tabId = await resolveTabId(args);
+  return await sendToPage(tabId, 'key_type', { text: args.text });
+});
+
+registerTool('send_keys', async (args) => {
+  if (!args.keys) throw new Error('send_keys: keys is required');
+  const tabId = await resolveTabId(args);
+  return await sendToPage(tabId, 'send_keys', { keys: args.keys, repeat: args.repeat });
+});
+
+registerTool('drag', async (args) => {
+  if (!args.from || !args.to) throw new Error('drag: from and to are required');
+  const tabId = await resolveTabId(args);
+  return await sendToPage(tabId, 'drag', { from: args.from, to: args.to });
+});
+
+registerTool('upload', async (args) => {
+  if (!args.selector) throw new Error('upload: selector is required');
+  const tabId = await resolveTabId(args);
+  return await sendToPage(tabId, 'upload', {
+    selector: args.selector, files: args.files, _payloads: args._payloads,
+  });
+});
+
+// dialog：必须在页面 MAIN world 预拦截 window.alert/confirm/prompt
+// （content script 隔离世界的覆盖对页面代码不可见）。
+// 近似语义：无法真正阻塞 JS 线程，拦截器记录对话框并按预设策略立即返回；
+// accept/dismiss 设置之后 confirm/prompt 的返回值，status 查询最近一次记录。
+const DIALOG_MAIN_WORLD_FUNC = (action, text) => {
+  const st = (window.__kimiDialog = window.__kimiDialog || { last: null, nextConfirm: true, nextPrompt: null });
+  if (!window.__kimiDialogInstalled) {
+    window.__kimiDialogInstalled = true;
+    window.alert = (msg) => { st.last = { type: 'alert', message: String(msg), at: Date.now() }; };
+    window.confirm = (msg) => { st.last = { type: 'confirm', message: String(msg), at: Date.now() }; return st.nextConfirm; };
+    window.prompt = (msg, def) => { st.last = { type: 'prompt', message: String(msg), at: Date.now() }; return st.nextPrompt != null ? st.nextPrompt : (def ?? ''); };
+  }
+  switch (action) {
+    case 'status':
+      return st.last ? { dialog: true, ...st.last } : { dialog: false };
+    case 'accept':
+      st.nextConfirm = true;
+      if (typeof text === 'string') st.nextPrompt = text;
+      return { success: true, action };
+    case 'dismiss':
+      st.nextConfirm = false;
+      st.nextPrompt = null;
+      return { success: true, action };
+    default:
+      throw new Error(`dialog: invalid action: ${action}（status/accept/dismiss）`);
+  }
+};
+
+registerTool('dialog', async (args) => {
+  if (!['status', 'accept', 'dismiss'].includes(args.action)) {
+    throw new Error('dialog: action must be status/accept/dismiss');
+  }
+  const tabId = await resolveTabId(args);
+  try {
+    const [res] = await chrome.scripting.executeScript({
+      target: { tabId }, world: 'MAIN', func: DIALOG_MAIN_WORLD_FUNC, args: [args.action, args.text],
+    });
+    return res?.result ?? { success: true };
+  } catch (err) {
+    throw new Error(`dialog: MAIN world injection failed: ${err?.message || err}`);
+  }
+});
+
 // --- 明确降级：CDP 依赖工具（Safari 无 chrome.debugger） --------------------
 // 错误消息写明原因，daemon 会包装成 ok:false 返回给 Agent。
 
@@ -532,8 +611,7 @@ registerTool('network', async () => { throw new Error(`network: ${UNSUPPORTED_CD
 registerTool('save_as_pdf', async () => { throw new Error(`save_as_pdf: ${UNSUPPORTED_CDP}`); });
 registerTool('mouse_click', async () => { throw new Error(`mouse_click: ${UNSUPPORTED_CDP}; use click (synthetic DOM click) instead`); });
 
-// 尚未实现的工具（后续批次）：upload / hover / key_type / send_keys / dialog / drag
-// —— 由 dispatchTool 统一回 Unknown tool。
+// 至此 25 个工具全部有明确行为（含降级错误路径），Unknown tool 只剩真正的未知工具。
 
 // ---------------------------------------------------------------------------
 // 生命周期：alarms 驱动 reconcile（MV3 非持久 background 保活）

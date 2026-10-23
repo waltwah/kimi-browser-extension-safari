@@ -86,6 +86,9 @@
 4. `tabs.captureVisibleTab`、`scripting.executeScript`（含 `world:"MAIN"`）、content script `sendMessage`（sendResponse + return true）在 Safari 26 均验证可用。
 5. 工具栏 popup 在背景页形态下正常打开。
 6. Xcode 工程路径与「临时扩展」路径独立；迭代 JS 代码用临时扩展（Reload 即生效），不需要每次 ⌘R。
+7. `tabs.sendMessage` 必须显式 `{frameId: 0}`：不指定时若页面有 iframe，某个无监听器的 frame 会"抢先响应" undefined（静默丢响应）。
+8. 合成 `el.click()` 在 Safari 不转移焦点（Chrome 会）→ click 工具内显式 `el.focus()`。
+9. `chrome.scripting.executeScript` 的 `world:"MAIN"` 在 Safari 26 可用 → dialog 工具用它预拦截 window.alert/confirm/prompt（content script 隔离世界的覆盖对页面不可见）。
 
 ## 6. 建议的技术路线
 
