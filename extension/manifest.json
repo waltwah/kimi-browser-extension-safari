@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Kimi Bridge for Safari",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Safari port of the Kimi Browser Extension bridge: connects to the local kimi-webbridge daemon so local AI agents can drive Safari.",
   "icons": {
     "16": "icon/16.png",
@@ -17,22 +17,34 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content-scripts/bridge.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content-scripts/bridge.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     },
     {
-      "matches": ["<all_urls>"],
-      "js": ["content-scripts/sidebar.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content-scripts/sidebar.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["sidebar.html"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "sidebar.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "permissions": [
@@ -42,7 +54,9 @@
     "alarms",
     "scripting"
   ],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' ws://*:* wss://*:* http://*:* https://*:*;"
   }
