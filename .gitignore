@@ -16,3 +16,6 @@ KimiBridgeSafari/
 
 # --- 构建产物 ---
 dist/
+
+# --- 本地隐私记录（不入库） ---
+*.local.md
