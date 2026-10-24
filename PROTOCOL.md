@@ -144,7 +144,7 @@ kimi-webbridge daemon（Go，127.0.0.1:10086，~/.kimi-webbridge/）
 
 - **握手**（逐字帧）：
   ```
-  → GET /ws?client=9240fb64-aeb4-4821-9735-b9bdde18b6b3
+  → GET /ws?client=<uuid>
   ext→daemon  {"type":"hello","payload":{"extensionVersion":"2.0.23"}}
   daemon→ext  {"type":"hello_ack","payload":{"daemonVersion":"v2.0.23"}}   // 注意有 payload
   双向周期性 {"type":"ping"} / {"type":"pong"}；扩展另定期 GET /status

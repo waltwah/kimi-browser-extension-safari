@@ -57,7 +57,7 @@
 - 本机：macOS 26.6.2，**Xcode 27.0 已装**（`/Applications/Xcode.app`），Node 26 + npm，Python 3.9。
 - ⚠️ `xcode-select` 指向 CommandLineTools，`xcrun safari-web-extension-packager` 不可用；用完整路径 `/Applications/Xcode.app/Contents/Developer/usr/bin/safari-web-extension-packager`，或 `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`。
 - ⚠️ npm 缓存目录权限损坏（`~/.npm` 属 root），所有 npm/npx 命令必须加：
-  `npm_config_cache=/Users/waltwah/Documents/develop/kimi_browserExtension/.npm-cache`
+  `npm_config_cache=$PWD/.npm-cache`
 - 打包命令（⚠️ 必须打 `dist/safari/` 背景页变体，先按上文重建）：
   ```bash
   /Applications/Xcode.app/Contents/Developer/usr/bin/safari-web-extension-packager ./dist/safari \

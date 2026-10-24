@@ -4,7 +4,7 @@
 
 官方扩展只支持 Chrome / Edge。本项目通过逆向「扩展 ↔ 本地 daemon」的 WebSocket 协议，实现一个接入同一 daemon 的 Safari Web Extension——本地 AI Agent（Claude Code、Cursor、Kimi Code 等）无需任何改动即可控制 Safari。
 
-> 状态：协议逆向已完成，扩展开发进行中。
+> 状态：✅ 已完成。25 个工具全部实现并在 Safari 26 实机验收；含常驻 Origin 中转 relay 与 Xcode 打包流程。
 
 ## 文档
 
@@ -14,6 +14,7 @@
 | [RESEARCH.md](RESEARCH.md) | Safari Web Extension 开发调研（API 差异、打包分发） |
 | [AGENTS.md](AGENTS.md) | 给 AI 协作者的项目指引（结构、约定、联调方法） |
 | [reverse/notes/](reverse/notes/) | 官方扩展源码的分析笔记 |
+| [relay/](relay/) | 常驻 Origin 伪装中转（daemon 有 WS Origin 白名单，Safari 必须经 relay 接入） |
 
 ## 快速验证（本机已装官方 Chrome 扩展 + daemon 时）
 
